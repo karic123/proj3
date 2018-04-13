@@ -50,7 +50,14 @@
  **************************************************************************/
 typedef struct {
 	struct list_head list;
-	/* TODO: DECLARE NECESSARY MEMBER VARIABLES */
+
+	/*DONE!   TODO: DECLARE NECESSARY MEMBER VARIABLES */
+
+	int Pageindex; //index of current page
+	char blockAddress; //address of current block
+	int blockSize; //order size of current block
+
+
 } page_t;
 
 /**************************************************************************
@@ -82,7 +89,15 @@ void buddy_init()
 	int n_pages = (1<<MAX_ORDER) / PAGE_SIZE;
 	for (i = 0; i < n_pages; i++) {
 		/* TODO: INITIALIZE PAGE STRUCTURES */
+		INIT_LIST_HEAD(&g_pages[i].list); //init page list
+
+		g_pages[i].Pageindex = i; //sets page index to i
+		g_pages[i].blockAddress = PAGE_TO_ADDR(i); //sets block address to page index to address
+		g_pages[i].blockSize = -1; //initialize to -1
 	}
+
+	//starts as one block
+	g_pages[0].blockSize = MAX_ORDER;
 
 	/* initialize freelist */
 	for (i = MIN_ORDER; i <= MAX_ORDER; i++) {
@@ -110,6 +125,56 @@ void buddy_init()
 void *buddy_alloc(int size)
 {
 	/* TODO: IMPLEMENT THIS FUNCTION */
+
+	//out of bounds??
+	if (size > (1 << MAX_ORDER) || size<=0)
+	{
+		printf("ERROR: invalid size \n");
+		return NULL;
+	}
+
+	int size_order = MIN_ORDER; //what order do we need to alloc this mem??
+	int i;
+
+	while(size_order <= MAX_ORDER && (1 << size_order)<size)
+	{
+		size_order++;
+	}
+
+	//printf("size requested: %i, order of %i\n", size, size_order); //DEBUGGING STUFF
+
+	for( i = size_order; i<=MAX_ORDER; i++)//find available memory
+	{
+		if(!list_empty(&free_area[i]))	//empty block has been found
+		{
+			page_t *left;
+			page_t *right;
+			int requestIndex;
+			void *requestAddress;
+			//I think the variable names are self explanatory
+
+			if(i==size_order)//block has been partitioned WOO!!
+			{
+				left = list_entry(free_area[i].next, page_t, list);
+				list_del(&(left->list)); //delete entry from list because it has been partitioned
+			}
+
+			else//break block down and put half in free_area
+			{
+				left = &g_pages[ADDR_TO_PAGE(buddy_alloc(1<<size_order))]; //move left
+				requestIndex = left->Pageindex + (1<<size_order) / PAGE_SIZE; //change request index to new left
+				right = &g_pages[requestIndex];//set right to be to the right of left
+
+				list_add(&(right->list), &free_area[size_order]);
+			}
+			left->blockSize = size_order; //update left block
+			requestAddress = PAGE_TO_ADDR(left->Pageindex); //find correct address
+			return(requestAddress); //return the address that was requested by the page and check everything again :)
+
+		}
+	}
+
+	//cannot find big enough blocks for this request :(
 	return NULL;
 }
 
